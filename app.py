@@ -19,15 +19,31 @@ if sys.stdout.encoding != 'UTF-8':
     sys.stdout.reconfigure(encoding='UTF-8')
 
 # 设置matplotlib支持中文显示
+# 调试信息 - 检查可用字体
+def check_fonts():
+    # 获取所有可用字体
+    font_list = [f.name for f in fm.fontManager.ttflist]
+    
+    # 检查是否有中文字体
+    chinese_fonts = [f for f in font_list if any(name in f for name in 
+                    ['SimHei', 'Noto Sans CJK', 'WenQuanYi', 'PingFang', 'Heiti', '黑体', '宋体', '微软雅黑'])]
+    
+    return {
+        "all_fonts": font_list,
+        "chinese_fonts": chinese_fonts,
+        "total_fonts": len(font_list),
+        "total_chinese_fonts": len(chinese_fonts)
+    }
+
 # 根据平台选择合适的中文字体
 system = platform.system()
 if system == 'Windows':
-    plt.rcParams['font.sans-serif'] = ['SimHei']
+    plt.rcParams['font.sans-serif'] = ['SimHei', 'Microsoft YaHei', 'SimSun']
 elif system == 'Linux':
     # Streamlit Cloud使用Linux系统
-    plt.rcParams['font.sans-serif'] = ['Noto Sans CJK JP', 'Noto Sans CJK SC', 'WenQuanYi Micro Hei']
+    plt.rcParams['font.sans-serif'] = ['Noto Sans CJK SC', 'Noto Sans CJK JP', 'WenQuanYi Micro Hei', 'Droid Sans Fallback']
 elif system == 'Darwin':  # macOS
-    plt.rcParams['font.sans-serif'] = ['PingFang SC', 'Heiti SC']
+    plt.rcParams['font.sans-serif'] = ['PingFang SC', 'Heiti SC', 'STHeiti']
 
 # 确保负号正确显示
 plt.rcParams['axes.unicode_minus'] = False
@@ -38,6 +54,17 @@ st.set_page_config(
     page_icon="👁️",
     layout="wide"
 )
+
+# 在侧边栏添加字体调试选项
+if st.sidebar.checkbox("显示字体调试信息", False):
+    font_info = check_fonts()
+    st.sidebar.write(f"系统: {system}")
+    st.sidebar.write(f"总字体数: {font_info['total_fonts']}")
+    st.sidebar.write(f"中文字体数: {font_info['total_chinese_fonts']}")
+    if st.sidebar.checkbox("显示所有中文字体", False):
+        st.sidebar.write("可用中文字体:")
+        for font in font_info['chinese_fonts']:
+            st.sidebar.write(f"- {font}")
 
 # 加载模型
 @st.cache_resource
@@ -54,7 +81,7 @@ def load_model():
         return EyeDiagnosisModel(model_path)
     else:
         st.warning("ONNX模型不存在，尝试加载PyTorch模型...")
-        return EyeDiagnosisModel("best_model.onnx")
+        return EyeDiagnosisModel("models/best_model.onnx")
 
 # 创建应用标题
 st.title("👁️ 眼底图像疾病诊断系统")
@@ -121,13 +148,19 @@ if st.button("开始诊断", disabled=(left_eye_img is None or right_eye_img is 
                 st.table(result_data)
             
             with res_col2:
-                # 使用Streamlit的bar_chart替代matplotlib
-                chart_data = {
-                    "疾病": [r["disease"] for r in results],
-                    "概率": [r["probability"] for r in results]
-                }
-                chart_df = pd.DataFrame(chart_data)
-                st.bar_chart(chart_df.set_index("疾病"))
+                try:
+                    fig = create_matplotlib_chart(results)
+                    st.pyplot(fig)
+                except Exception as e:
+                    st.error(f"创建图表时出错: {str(e)}")
+                    # 回退到Streamlit的内置图表
+                    st.write("使用内置图表作为备选:")
+                    chart_data = {
+                        "疾病": [r["disease"] for r in results],
+                        "概率": [r["probability"] for r in results]
+                    }
+                    chart_df = pd.DataFrame(chart_data)
+                    st.bar_chart(chart_df.set_index("疾病"))
             
             # 显示诊断总结
             st.subheader("诊断总结")
@@ -152,3 +185,36 @@ if st.button("开始诊断", disabled=(left_eye_img is None or right_eye_img is 
 st.markdown("---")
 st.markdown("👁️ **眼底图像疾病诊断系统** | 基于深度学习的眼底图像分析")
 st.markdown("⚠️ 免责声明：本系统仅供研究和参考，不应替代专业医疗诊断。")
+
+def create_matplotlib_chart(results):
+    """创建Matplotlib风格的疾病概率条形图"""
+    # 创建图形和坐标轴
+    fig, ax = plt.subplots(figsize=(10, 6))
+    
+    # 提取数据
+    diseases = [r["disease"] for r in results]
+    probs = [r["probability"] for r in results]
+    
+    # 设置条形颜色 - 概率>0.5的为绿色，否则为灰色
+    colors = ['green' if p > 0.5 else 'gray' for p in probs]
+    
+    # 创建水平条形图
+    bars = ax.barh(diseases, probs, color=colors)
+    
+    # 设置图表范围和标签
+    ax.set_xlim(0, 1.0)
+    ax.set_xlabel('概率')
+    ax.set_title('疾病检测概率')
+    
+    # 添加概率值标签
+    for i, v in enumerate(probs):
+        ax.text(v + 0.01, i, f"{v:.2f}", va='center')
+    
+    # 设置网格线
+    ax.grid(axis='x', linestyle='--', alpha=0.7)
+    
+    # 调整布局
+    plt.tight_layout()
+    
+    return fig
+
