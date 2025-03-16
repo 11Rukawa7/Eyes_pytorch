@@ -9,6 +9,7 @@ import numpy as np
 from typing import Dict, Optional, List, Tuple
 import sys
 import os
+import onnxruntime as ort  # 确保导入onnxruntime
 # 设置默认编码为UTF-8
 if sys.stdout.encoding != 'UTF-8':
     sys.stdout.reconfigure(encoding='UTF-8')
@@ -145,37 +146,52 @@ def get_transforms():
 class EyeDiagnosisModel:
     def __init__(self, model_path):
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        self.is_onnx = model_path.endswith('.onnx')
         self.model = self._load_model(model_path)
         self.transforms = get_transforms()
-        self.is_onnx = 'onnx' in model_path
         
     def _load_model(self, model_path):
-        model = DualEyeNet(num_classes=8)
+        """加载模型，支持PyTorch和ONNX格式"""
+        # 确保路径处理正确
+        if not os.path.exists(model_path):
+            # 尝试相对路径
+            base_dir = os.path.dirname(os.path.abspath(__file__))
+            model_path = os.path.join(base_dir, model_path)
+            
+        if not os.path.exists(model_path):
+            raise FileNotFoundError(f"找不到模型文件: {model_path}")
         
-        try:
-            # 尝试加载模型权重
-            # 确保路径处理正确
-            if not os.path.exists(model_path):
-                # 尝试相对路径
-                base_dir = os.path.dirname(os.path.abspath(__file__))
-                model_path = os.path.join(base_dir, model_path)
-                
-            checkpoint = torch.load(model_path, map_location=self.device)
+        if self.is_onnx:
+            try:
+                # 为ONNX创建推理会话
+                providers = ['CUDAExecutionProvider', 'CPUExecutionProvider'] if torch.cuda.is_available() else ['CPUExecutionProvider']
+                session = ort.InferenceSession(model_path, providers=providers)
+                print(f"ONNX模型成功加载自: {model_path}")
+                return session
+            except Exception as e:
+                print(f"加载ONNX模型时出错: {e}")
+                raise
+        else:
+            # 加载PyTorch模型
+            model = DualEyeNet(num_classes=8)
             
-            # 检查是否是完整的检查点或只是模型状态字典
-            if 'model_state_dict' in checkpoint:
-                model.load_state_dict(checkpoint['model_state_dict'])
-            else:
-                model.load_state_dict(checkpoint)
+            try:
+                checkpoint = torch.load(model_path, map_location=self.device)
                 
-            print(f"模型成功加载自: {model_path}")
-        except Exception as e:
-            print(f"加载模型时出错: {e}")
-            raise
-            
-        model = model.to(self.device)
-        model.eval()
-        return model
+                # 检查是否是完整的检查点或只是模型状态字典
+                if 'model_state_dict' in checkpoint:
+                    model.load_state_dict(checkpoint['model_state_dict'])
+                else:
+                    model.load_state_dict(checkpoint)
+                    
+                print(f"PyTorch模型成功加载自: {model_path}")
+            except Exception as e:
+                print(f"加载PyTorch模型时出错: {e}")
+                raise
+                
+            model = model.to(self.device)
+            model.eval()
+            return model
     
     def preprocess_image(self, image):
         """预处理图像"""
@@ -201,7 +217,13 @@ class EyeDiagnosisModel:
             left_np = left_tensor.numpy()
             right_np = right_tensor.numpy()
             
-            # 创建输入字典 - 注意这里使用的是单独的输入名称
+            # 添加批次维度 - 修复维度错误
+            if len(left_np.shape) == 3:
+                left_np = np.expand_dims(left_np, axis=0)
+            if len(right_np.shape) == 3:
+                right_np = np.expand_dims(right_np, axis=0)
+            
+            # 创建输入字典
             ort_inputs = {
                 'left_eye': left_np,
                 'right_eye': right_np
@@ -214,6 +236,7 @@ class EyeDiagnosisModel:
             # 应用sigmoid获取概率
             probs = 1 / (1 + np.exp(-logits))[0]
         else:
+            # PyTorch模型推理
             # 添加批次维度
             left_tensor = left_tensor.unsqueeze(0).to(self.device)
             right_tensor = right_tensor.unsqueeze(0).to(self.device)

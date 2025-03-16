@@ -28,8 +28,19 @@ st.set_page_config(
 # 加载模型
 @st.cache_resource
 def load_model():
-    model_path = "models/best_model.pth"
-    return EyeDiagnosisModel(model_path)
+    """加载模型，优先使用ONNX模型"""
+    model_path = "models/best_model.onnx"
+    
+    # 检查ONNX模型是否存在
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    full_path = os.path.join(base_dir, model_path)
+    
+    if os.path.exists(full_path):
+        st.info("正在加载ONNX模型...")
+        return EyeDiagnosisModel(model_path)
+    else:
+        st.warning("ONNX模型不存在，尝试加载PyTorch模型...")
+        return EyeDiagnosisModel("best_model.onnx")
 
 # 创建应用标题
 st.title("👁️ 眼底图像疾病诊断系统")
