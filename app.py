@@ -7,8 +7,6 @@ import os
 from pathlib import Path
 import matplotlib.pyplot as plt
 import sys
-import matplotlib.font_manager as fm
-import platform
 
 from model_loader import EyeDiagnosisModel
 from utils import load_image_from_bytes, resize_image_for_display
@@ -16,50 +14,9 @@ from utils import load_image_from_bytes, resize_image_for_display
 # 设置默认编码为UTF-8
 if sys.stdout.encoding != 'UTF-8':
     sys.stdout.reconfigure(encoding='UTF-8')
-
-# 调试信息 - 检查可用字体
-def check_fonts():
-    # 获取所有可用字体
-    font_list = [f.name for f in fm.fontManager.ttflist]
-    
-    # 检查是否有中文字体
-    chinese_fonts = [f for f in font_list if any(name in f for name in 
-                    ['SimHei', 'Noto Sans CJK', 'WenQuanYi', 'PingFang', 'Heiti', '黑体', '宋体', '微软雅黑'])]
-    
-    return {
-        "all_fonts": font_list,
-        "chinese_fonts": chinese_fonts,
-        "total_fonts": len(font_list),
-        "total_chinese_fonts": len(chinese_fonts)
-    }
-
-# 根据平台选择合适的中文字体
-system = platform.system()
-if system == 'Windows':
-    plt.rcParams['font.sans-serif'] = ['SimHei', 'Microsoft YaHei', 'SimSun']
-elif system == 'Linux':
-    # Streamlit Cloud使用Linux系统
-    plt.rcParams['font.sans-serif'] = ['Noto Sans CJK SC', 'Noto Sans CJK JP', 'WenQuanYi Micro Hei', 'Droid Sans Fallback']
-elif system == 'Darwin':  # macOS
-    plt.rcParams['font.sans-serif'] = ['PingFang SC', 'Heiti SC', 'STHeiti']
-
-# 确保负号正确显示
+# 设置matplotlib支持中文显示
+plt.rcParams['font.sans-serif'] = ['SimHei']
 plt.rcParams['axes.unicode_minus'] = False
-
-# 在侧边栏添加字体调试选项
-if st.sidebar.checkbox("显示字体调试信息", False):
-    font_info = check_fonts()
-    st.sidebar.write(f"系统: {system}")
-    st.sidebar.write(f"总字体数: {font_info['total_fonts']}")
-    st.sidebar.write(f"中文字体数: {font_info['total_chinese_fonts']}")
-    if st.sidebar.checkbox("显示所有中文字体", False):
-        st.sidebar.write("可用中文字体:")
-        for font in font_info['chinese_fonts']:
-            st.sidebar.write(f"- {font}")
-
-# 设置默认编码为UTF-8
-if sys.stdout.encoding != 'UTF-8':
-    sys.stdout.reconfigure(encoding='UTF-8')
 
 # 设置页面配置
 st.set_page_config(
