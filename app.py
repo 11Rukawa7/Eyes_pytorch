@@ -9,6 +9,7 @@ import matplotlib.pyplot as plt
 import sys
 import matplotlib.font_manager as fm
 import platform
+import pandas as pd
 
 from model_loader import EyeDiagnosisModel
 from utils import load_image_from_bytes, resize_image_for_display
@@ -30,6 +31,7 @@ elif system == 'Darwin':  # macOS
 
 # 确保负号正确显示
 plt.rcParams['axes.unicode_minus'] = False
+
 # 设置页面配置
 st.set_page_config(
     page_title="眼底图像疾病诊断系统",
@@ -52,7 +54,7 @@ def load_model():
         return EyeDiagnosisModel(model_path)
     else:
         st.warning("ONNX模型不存在，尝试加载PyTorch模型...")
-        return EyeDiagnosisModel("models/best_model.onnx")
+        return EyeDiagnosisModel("best_model.onnx")
 
 # 创建应用标题
 st.title("👁️ 眼底图像疾病诊断系统")
@@ -119,23 +121,13 @@ if st.button("开始诊断", disabled=(left_eye_img is None or right_eye_img is 
                 st.table(result_data)
             
             with res_col2:
-                # 创建条形图
-                fig, ax = plt.subplots(figsize=(10, 6))
-                
-                diseases = [r["disease"] for r in results]
-                probs = [r["probability"] for r in results]
-                colors = ['green' if p > 0.5 else 'gray' for p in probs]
-                
-                ax.barh(diseases, probs, color=colors)
-                ax.set_xlim(0, 1)
-                ax.set_xlabel('概率')
-                ax.set_title('疾病检测概率')
-                
-                # 添加概率值标签
-                for i, v in enumerate(probs):
-                    ax.text(v + 0.01, i, f"{v:.2f}", va='center')
-                
-                st.pyplot(fig)
+                # 使用Streamlit的bar_chart替代matplotlib
+                chart_data = {
+                    "疾病": [r["disease"] for r in results],
+                    "概率": [r["probability"] for r in results]
+                }
+                chart_df = pd.DataFrame(chart_data)
+                st.bar_chart(chart_df.set_index("疾病"))
             
             # 显示诊断总结
             st.subheader("诊断总结")
@@ -160,3 +152,46 @@ if st.button("开始诊断", disabled=(left_eye_img is None or right_eye_img is 
 st.markdown("---")
 st.markdown("👁️ **眼底图像疾病诊断系统** | 基于深度学习的眼底图像分析")
 st.markdown("⚠️ 免责声明：本系统仅供研究和参考，不应替代专业医疗诊断。")
+
+def create_disease_chart(results):
+    # 创建条形图
+    fig, ax = plt.subplots(figsize=(10, 6))
+    
+    # 检查字体可用性
+    font_found = False
+    for font in plt.rcParams['font.sans-serif']:
+        if any(f.name == font for f in fm.fontManager.ttflist):
+            font_found = True
+            break
+    
+    # 如果没有找到合适的中文字体，使用简单的英文标签
+    if not font_found:
+        st.warning("未找到中文字体，图表将使用英文标签")
+        # 使用英文疾病名称
+        disease_map = {
+            '正常': 'Normal',
+            '糖尿病': 'Diabetes',
+            '青光眼': 'Glaucoma',
+            '白内障': 'Cataract',
+            'AMD': 'AMD',
+            '高血压': 'Hypertension',
+            '近视': 'Myopia',
+            '其他': 'Others'
+        }
+        diseases = [disease_map.get(r["disease"], r["disease"]) for r in results]
+    else:
+        diseases = [r["disease"] for r in results]
+    
+    probs = [r["probability"] for r in results]
+    colors = ['green' if p > 0.5 else 'gray' for p in probs]
+    
+    ax.barh(diseases, probs, color=colors)
+    ax.set_xlim(0, 1)
+    ax.set_xlabel('概率' if font_found else 'Probability')
+    ax.set_title('疾病检测概率' if font_found else 'Disease Detection Probability')
+    
+    # 添加概率值标签
+    for i, v in enumerate(probs):
+        ax.text(v + 0.01, i, f"{v:.2f}", va='center')
+    
+    return fig
