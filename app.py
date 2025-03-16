@@ -29,7 +29,7 @@ st.set_page_config(
 @st.cache_resource
 def load_model():
     """加载模型，优先使用ONNX模型"""
-    model_path = "models/best_model.onnx"
+    model_path = "best_model.onnx"
     
     # 检查ONNX模型是否存在
     base_dir = os.path.dirname(os.path.abspath(__file__))
