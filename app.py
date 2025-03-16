@@ -6,7 +6,10 @@ import io
 import os
 from pathlib import Path
 import matplotlib.pyplot as plt
+import matplotlib.font_manager as fm
 import sys
+import platform
+import pandas as pd
 
 from model_loader import EyeDiagnosisModel
 from utils import load_image_from_bytes, resize_image_for_display
@@ -14,9 +17,70 @@ from utils import load_image_from_bytes, resize_image_for_display
 # 设置默认编码为UTF-8
 if sys.stdout.encoding != 'UTF-8':
     sys.stdout.reconfigure(encoding='UTF-8')
+
 # 设置matplotlib支持中文显示
-plt.rcParams['font.sans-serif'] = ['SimHei']
-plt.rcParams['axes.unicode_minus'] = False
+def setup_matplotlib_fonts():
+    # 根据平台选择合适的中文字体
+    system = platform.system()
+    if system == 'Windows':
+        plt.rcParams['font.sans-serif'] = ['SimHei', 'Microsoft YaHei', 'SimSun']
+    elif system == 'Linux':
+        # Streamlit Cloud使用Linux系统
+        plt.rcParams['font.sans-serif'] = ['Noto Sans CJK SC', 'Noto Sans CJK JP', 'WenQuanYi Micro Hei', 'Droid Sans Fallback']
+    elif system == 'Darwin':  # macOS
+        plt.rcParams['font.sans-serif'] = ['PingFang SC', 'Heiti SC', 'STHeiti']
+    
+    # 确保负号正确显示
+    plt.rcParams['axes.unicode_minus'] = False
+    
+    # 检查是否有可用的中文字体
+    font_found = False
+    for font in plt.rcParams['font.sans-serif']:
+        if any(f.name == font for f in fm.fontManager.ttflist):
+            font_found = True
+            break
+    
+    return font_found
+
+# 尝试设置中文字体
+has_chinese_font = setup_matplotlib_fonts()
+
+# 创建自定义Matplotlib图表函数
+def create_disease_chart(results):
+    """创建疾病概率条形图"""
+    # 创建图形和坐标轴
+    fig, ax = plt.subplots(figsize=(10, 6))
+    
+    # 提取数据
+    diseases = [r["disease"] for r in results]
+    probs = [r["probability"] for r in results]
+    
+    # 如果没有找到中文字体，尝试使用英文标签
+    if not has_chinese_font:
+        st.warning("未找到中文字体，图表将尝试使用系统默认字体")
+    
+    # 设置条形颜色 - 概率>0.5的为绿色，否则为灰色
+    colors = ['green' if p > 0.5 else 'gray' for p in probs]
+    
+    # 创建水平条形图
+    bars = ax.barh(diseases, probs, color=colors)
+    
+    # 设置图表范围和标签
+    ax.set_xlim(0, 1.0)
+    ax.set_xlabel('概率')
+    ax.set_title('疾病检测概率')
+    
+    # 添加概率值标签
+    for i, v in enumerate(probs):
+        ax.text(v + 0.01, i, f"{v:.2f}", va='center')
+    
+    # 设置网格线
+    ax.grid(axis='x', linestyle='--', alpha=0.7)
+    
+    # 调整布局
+    plt.tight_layout()
+    
+    return fig
 
 # 设置页面配置
 st.set_page_config(
@@ -107,35 +171,30 @@ if st.button("开始诊断", disabled=(left_eye_img is None or right_eye_img is 
                 st.table(result_data)
             
             with res_col2:
-                # 创建条形图
-                fig, ax = plt.subplots(figsize=(10, 6))
-                
-                diseases = [r["disease"] for r in results]
-                probs = [r["probability"] for r in results]
-                colors = ['green' if p > 0.5 else 'gray' for p in probs]
-                
-                ax.barh(diseases, probs, color=colors)
-                ax.set_xlim(0, 1)
-                ax.set_xlabel('概率')
-                ax.set_title('疾病检测概率')
-                
-                # 添加概率值标签
-                for i, v in enumerate(probs):
-                    ax.text(v + 0.01, i, f"{v:.2f}", va='center')
-                
-                st.pyplot(fig)
+                try:
+                    # 使用自定义Matplotlib图表
+                    fig = create_disease_chart(results)
+                    st.pyplot(fig)
+                except Exception as e:
+                    st.error(f"创建图表时出错: {str(e)}")
+                    # 回退到Streamlit的内置图表
+                    st.write("使用内置图表作为备选:")
+                    chart_data = pd.DataFrame({
+                        "概率": [r["probability"] for r in results]
+                    }, index=[r["disease"] for r in results])
+                    st.bar_chart(chart_data)
             
             # 显示诊断总结
             st.subheader("诊断总结")
             
             detected_diseases = [r["disease"] for r in results if r["predicted"]]
             
-            if "Normal" in detected_diseases and len(detected_diseases) > 1:
-                detected_diseases.remove("Normal")
+            if "正常" in detected_diseases and len(detected_diseases) > 1:
+                detected_diseases.remove("正常")
                 
             if len(detected_diseases) == 0:
                 st.success("👍 未检测到任何眼部疾病。")
-            elif "Normal" in detected_diseases and len(detected_diseases) == 1:
+            elif "正常" in detected_diseases and len(detected_diseases) == 1:
                 st.success("👍 眼部状况正常，未检测到任何疾病。")
             else:
                 st.warning(f"⚠️ 检测到可能的眼部疾病: {', '.join(detected_diseases)}")
@@ -143,6 +202,23 @@ if st.button("开始诊断", disabled=(left_eye_img is None or right_eye_img is 
                 
         except Exception as e:
             st.error(f"诊断过程中出错: {str(e)}")
+
+# 添加字体调试选项
+if st.sidebar.checkbox("显示字体调试信息", False):
+    st.sidebar.write(f"系统: {platform.system()}")
+    
+    # 获取所有可用字体
+    font_list = [f.name for f in fm.fontManager.ttflist]
+    chinese_fonts = [f for f in font_list if any(name in f for name in 
+                    ['SimHei', 'Noto Sans CJK', 'WenQuanYi', 'PingFang', 'Heiti', '黑体', '宋体', '微软雅黑'])]
+    
+    st.sidebar.write(f"总字体数: {len(font_list)}")
+    st.sidebar.write(f"中文字体数: {len(chinese_fonts)}")
+    
+    if st.sidebar.checkbox("显示所有中文字体", False):
+        st.sidebar.write("可用中文字体:")
+        for font in chinese_fonts:
+            st.sidebar.write(f"- {font}")
 
 # 添加页脚
 st.markdown("---")
