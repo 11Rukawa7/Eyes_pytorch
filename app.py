@@ -29,7 +29,7 @@ st.set_page_config(
 @st.cache_resource
 def load_model():
     """加载模型，优先使用ONNX模型"""
-    model_path = "models/best_model.onnx"
+    model_path = "best_model.onnx"
     
     # 检查ONNX模型是否存在
     base_dir = os.path.dirname(os.path.abspath(__file__))
@@ -57,7 +57,7 @@ with col1:
     if left_eye_file is not None:
         left_eye_bytes = left_eye_file.getvalue()
         left_eye_img = load_image_from_bytes(left_eye_bytes)
-        st.image(left_eye_img, caption="左眼图像", use_column_width=True)
+        st.image(left_eye_img, caption="左眼图像", use_container_width=True)
     else:
         st.info("请上传左眼图像")
         left_eye_img = None
@@ -70,7 +70,7 @@ with col2:
     if right_eye_file is not None:
         right_eye_bytes = right_eye_file.getvalue()
         right_eye_img = load_image_from_bytes(right_eye_bytes)
-        st.image(right_eye_img, caption="右眼图像", use_column_width=True)
+        st.image(right_eye_img, caption="右眼图像", use_container_width=True)
     else:
         st.info("请上传右眼图像")
         right_eye_img = None
