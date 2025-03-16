@@ -40,7 +40,7 @@ def load_model():
         return EyeDiagnosisModel(model_path)
     else:
         st.warning("ONNX模型不存在，尝试加载PyTorch模型...")
-        return EyeDiagnosisModel("best_model.onnx")
+        return EyeDiagnosisModel("models/best_model.onnx")
 
 # 创建应用标题
 st.title("👁️ 眼底图像疾病诊断系统")
