@@ -7,6 +7,8 @@ import os
 from pathlib import Path
 import matplotlib.pyplot as plt
 import sys
+import matplotlib.font_manager as fm
+import platform
 
 from model_loader import EyeDiagnosisModel
 from utils import load_image_from_bytes, resize_image_for_display
@@ -14,10 +16,20 @@ from utils import load_image_from_bytes, resize_image_for_display
 # 设置默认编码为UTF-8
 if sys.stdout.encoding != 'UTF-8':
     sys.stdout.reconfigure(encoding='UTF-8')
-# 设置matplotlib支持中文显示
-plt.rcParams['font.sans-serif'] = ['SimHei']
-plt.rcParams['axes.unicode_minus'] = False
 
+# 设置matplotlib支持中文显示
+# 根据平台选择合适的中文字体
+system = platform.system()
+if system == 'Windows':
+    plt.rcParams['font.sans-serif'] = ['SimHei']
+elif system == 'Linux':
+    # Streamlit Cloud使用Linux系统
+    plt.rcParams['font.sans-serif'] = ['Noto Sans CJK JP', 'Noto Sans CJK SC', 'WenQuanYi Micro Hei']
+elif system == 'Darwin':  # macOS
+    plt.rcParams['font.sans-serif'] = ['PingFang SC', 'Heiti SC']
+
+# 确保负号正确显示
+plt.rcParams['axes.unicode_minus'] = False
 # 设置页面配置
 st.set_page_config(
     page_title="眼底图像疾病诊断系统",
