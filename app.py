@@ -9,7 +9,6 @@ import matplotlib.pyplot as plt
 import sys
 import matplotlib.font_manager as fm
 import platform
-import pandas as pd
 
 from model_loader import EyeDiagnosisModel
 from utils import load_image_from_bytes, resize_image_for_display
@@ -18,7 +17,6 @@ from utils import load_image_from_bytes, resize_image_for_display
 if sys.stdout.encoding != 'UTF-8':
     sys.stdout.reconfigure(encoding='UTF-8')
 
-# 设置matplotlib支持中文显示
 # 调试信息 - 检查可用字体
 def check_fonts():
     # 获取所有可用字体
@@ -48,13 +46,6 @@ elif system == 'Darwin':  # macOS
 # 确保负号正确显示
 plt.rcParams['axes.unicode_minus'] = False
 
-# 设置页面配置
-st.set_page_config(
-    page_title="眼底图像疾病诊断系统",
-    page_icon="👁️",
-    layout="wide"
-)
-
 # 在侧边栏添加字体调试选项
 if st.sidebar.checkbox("显示字体调试信息", False):
     font_info = check_fonts()
@@ -66,11 +57,22 @@ if st.sidebar.checkbox("显示字体调试信息", False):
         for font in font_info['chinese_fonts']:
             st.sidebar.write(f"- {font}")
 
+# 设置默认编码为UTF-8
+if sys.stdout.encoding != 'UTF-8':
+    sys.stdout.reconfigure(encoding='UTF-8')
+
+# 设置页面配置
+st.set_page_config(
+    page_title="眼底图像疾病诊断系统",
+    page_icon="👁️",
+    layout="wide"
+)
+
 # 加载模型
 @st.cache_resource
 def load_model():
     """加载模型，优先使用ONNX模型"""
-    model_path = "best_model.onnx"
+    model_path = "models/best_model.onnx"
     
     # 检查ONNX模型是否存在
     base_dir = os.path.dirname(os.path.abspath(__file__))
@@ -148,19 +150,23 @@ if st.button("开始诊断", disabled=(left_eye_img is None or right_eye_img is 
                 st.table(result_data)
             
             with res_col2:
-                try:
-                    fig = create_matplotlib_chart(results)
-                    st.pyplot(fig)
-                except Exception as e:
-                    st.error(f"创建图表时出错: {str(e)}")
-                    # 回退到Streamlit的内置图表
-                    st.write("使用内置图表作为备选:")
-                    chart_data = {
-                        "疾病": [r["disease"] for r in results],
-                        "概率": [r["probability"] for r in results]
-                    }
-                    chart_df = pd.DataFrame(chart_data)
-                    st.bar_chart(chart_df.set_index("疾病"))
+                # 创建条形图
+                fig, ax = plt.subplots(figsize=(10, 6))
+                
+                diseases = [r["disease"] for r in results]
+                probs = [r["probability"] for r in results]
+                colors = ['green' if p > 0.5 else 'gray' for p in probs]
+                
+                ax.barh(diseases, probs, color=colors)
+                ax.set_xlim(0, 1)
+                ax.set_xlabel('概率')
+                ax.set_title('疾病检测概率')
+                
+                # 添加概率值标签
+                for i, v in enumerate(probs):
+                    ax.text(v + 0.01, i, f"{v:.2f}", va='center')
+                
+                st.pyplot(fig)
             
             # 显示诊断总结
             st.subheader("诊断总结")
@@ -185,36 +191,3 @@ if st.button("开始诊断", disabled=(left_eye_img is None or right_eye_img is 
 st.markdown("---")
 st.markdown("👁️ **眼底图像疾病诊断系统** | 基于深度学习的眼底图像分析")
 st.markdown("⚠️ 免责声明：本系统仅供研究和参考，不应替代专业医疗诊断。")
-
-def create_matplotlib_chart(results):
-    """创建Matplotlib风格的疾病概率条形图"""
-    # 创建图形和坐标轴
-    fig, ax = plt.subplots(figsize=(10, 6))
-    
-    # 提取数据
-    diseases = [r["disease"] for r in results]
-    probs = [r["probability"] for r in results]
-    
-    # 设置条形颜色 - 概率>0.5的为绿色，否则为灰色
-    colors = ['green' if p > 0.5 else 'gray' for p in probs]
-    
-    # 创建水平条形图
-    bars = ax.barh(diseases, probs, color=colors)
-    
-    # 设置图表范围和标签
-    ax.set_xlim(0, 1.0)
-    ax.set_xlabel('概率')
-    ax.set_title('疾病检测概率')
-    
-    # 添加概率值标签
-    for i, v in enumerate(probs):
-        ax.text(v + 0.01, i, f"{v:.2f}", va='center')
-    
-    # 设置网格线
-    ax.grid(axis='x', linestyle='--', alpha=0.7)
-    
-    # 调整布局
-    plt.tight_layout()
-    
-    return fig
-
